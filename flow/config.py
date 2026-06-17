@@ -10,6 +10,7 @@ class Config:
     """Runtime settings, populated from config.toml with sensible defaults."""
 
     model: str = "base.en"
+    engine: str = "whisper"
     keys: list[str] = field(default_factory=lambda: ["ctrl", "alt"])
     max_seconds: int = 180
     sample_rate: int = 16000
@@ -66,6 +67,16 @@ def load_config(path: str | None = None) -> Config:
         if not isinstance(beam_size, int) or isinstance(beam_size, bool) or beam_size <= 0:
             raise ValueError("whisper.beam_size must be a positive integer")
         cfg.beam_size = beam_size
+
+    engine = data.get("engine", {})
+    if not isinstance(engine, dict):
+        raise ValueError("[engine] must be a TOML table")
+    if "name" in engine:
+        from flow.engines import ENGINE_NAMES
+
+        if engine["name"] not in ENGINE_NAMES:
+            raise ValueError(f"engine.name must be one of {ENGINE_NAMES}")
+        cfg.engine = engine["name"]
 
     recording = data.get("recording", {})
     if not isinstance(recording, dict):
