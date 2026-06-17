@@ -1,8 +1,10 @@
-"""Local speech-to-text using faster-whisper."""
+"""faster-whisper engine (CTranslate2, CPU)."""
 
 import logging
 
 import numpy as np
+
+from flow.engines import Transcriber
 
 _SAMPLE_RATE = 16000
 _MIN_SECONDS = 0.25
@@ -12,8 +14,10 @@ for _name in ("faster_whisper", "huggingface_hub", "ctranslate2"):
     logging.getLogger(_name).setLevel(logging.WARNING)
 
 
-class Transcriber:
+class WhisperTranscriber(Transcriber):
     """Wraps a faster-whisper model for English transcription on CPU."""
+
+    name = "whisper"
 
     def __init__(
         self,
@@ -26,8 +30,11 @@ class Transcriber:
         self.beam_size = beam_size
         self._model = None
 
+    @property
+    def label(self) -> str:
+        return f"faster-whisper ({self.model_name})"
+
     def load(self) -> None:
-        """Instantiate the Whisper model. Idempotent."""
         if self._model is not None:
             return
         from faster_whisper import WhisperModel
@@ -37,14 +44,11 @@ class Transcriber:
         )
 
     def transcribe(self, audio: np.ndarray) -> str:
-        """Transcribe 16 kHz mono float32 audio; returns "" for too-short audio."""
         if len(audio) < _SAMPLE_RATE * _MIN_SECONDS:
             return ""
         self.load()
-        # vad_filter skips non-speech (pauses, breathing) — faster on real
-        # dictation and avoids hallucinated text during silences.
-        # condition_on_previous_text=False prevents repetition spirals and
-        # their expensive temperature-fallback re-decodes on long recordings.
+        # vad_filter skips non-speech; condition_on_previous_text=False avoids
+        # repetition spirals and their expensive temperature re-decodes.
         segments, _info = self._model.transcribe(
             audio,
             language="en",
@@ -53,3 +57,6 @@ class Transcriber:
             condition_on_previous_text=False,
         )
         return "".join(segment.text for segment in segments).strip()
+
+    def unload(self) -> None:
+        self._model = None
